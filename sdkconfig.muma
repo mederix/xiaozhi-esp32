@@ -1,4 +1,35 @@
 # Selecao do board para build manual no Windows, onde scripts/build.py nao roda
-# (ele chama subprocess.run(["idf.py", ...]) e idf.py nao e executavel no Windows).
+# sem a correcao do shutil.which (ver docs/build-windows-cli.md).
 # Simbolo conferido em main/CMakeLists.txt:754 e main/Kconfig.projbuild:412.
 CONFIG_BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA=y
+
+# Wake word pela particao de assets, e NAO o WakeNet chines embutido.
+# O padrao para S3 com PSRAM e USE_AFE_WAKE_WORD, que ignora o assets: gravar
+# um build assim faria o aparelho parar de atender por "ok annia".
+# So USE_CUSTOM_WAKE_WORD compila custom_wake_word.cc, que le o index.json.
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+
+# Valores de reserva. O aparelho NAO os usa: com srmodels vindo do assets, o
+# Initialize cai no ramo que le o index.json. Valem so se um dia os modelos
+# vierem de uma particao "model", que este aparelho nao tem.
+CONFIG_CUSTOM_WAKE_WORD="ok annia"
+CONFIG_CUSTOM_WAKE_WORD_DISPLAY="Annia"
+CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=15
+
+# O build exige um modelo MultiNet selecionado quando USE_CUSTOM_WAKE_WORD esta
+# ligado, senao build_default_assets.py aborta com
+#   "USE_CUSTOM_WAKE_WORD is enabled but no multinet models are selected".
+# Escolhido para casar com o que o APARELHO ja tem: o srmodels.bin gravado na
+# particao de assets contem mn6_en (conferido no backup de 16 MB), e o
+# index.json declara "language": "en".
+# Isto so afeta o generated_assets.bin, que NAO gravamos -- mas manter igual
+# evita uma incompatibilidade silenciosa se um dia gravarmos.
+CONFIG_SR_MN_EN_MULTINET6_QUANT=y
+
+# Idioma da tela e dos prompts de voz. O padrao do repositorio e zh-CN, e foi
+# assim que o aparelho apareceu em chines depois da primeira gravacao.
+# pt-BR NAO existia no firmware: foi criado neste fork a partir do pt-PT, com
+# as 52 strings adaptadas para portugues brasileiro. Os .ogg sao os do pt-PT
+# (sotaque europeu) -- o CMake so cai para o audio en-US se o idioma nao tiver
+# o arquivo, e aqui tem.
+CONFIG_LANGUAGE_PT_BR=y
