@@ -7,6 +7,7 @@ import zipfile
 import argparse
 import re
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -55,7 +56,11 @@ def get_project_version() -> Optional[str]:
 
 
 def _run_idf(*args: str, preview: bool = False) -> None:
-    command = ["idf.py"]
+    # On Windows, ESP-IDF exposes idf.py through the idf-exe shim (idf.py.exe).
+    # CreateProcess does not apply PATHEXT, so a bare "idf.py" resolves to the raw
+    # script in $IDF_PATH/tools and fails with [WinError 193]. shutil.which() does
+    # apply PATHEXT and returns the executable; on POSIX it returns idf.py itself.
+    command = [shutil.which("idf.py") or "idf.py"]
     if preview:
         command.append("--preview")
     command.extend(args)

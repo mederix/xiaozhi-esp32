@@ -1,0 +1,4 @@
+# Selecao do board para build manual no Windows, onde scripts/build.py nao roda
+# (ele chama subprocess.run(["idf.py", ...]) e idf.py nao e executavel no Windows).
+# Simbolo conferido em main/CMakeLists.txt:754 e main/Kconfig.projbuild:412.
+CONFIG_BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA=y
