@@ -10,6 +10,30 @@ CONFIG_BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA=y
 #
 # ⚠️ O PRECO: o aparelho deixa de atender por "ok annia" e passa a atender por "Sophia".
 CONFIG_USE_AFE_WAKE_WORD=y
+
+# 🚨 NAO LIGUE UM MODELO WakeNet10 AQUI. FOI TESTADO EM 08/09/2026 E NAO CARREGA.
+#
+#    O esp-sr 2.5.3 DISTRIBUI os modelos WN10 como wn10_data_p1/_p2 e _MODEL_INFO_p1/_p2, e
+#    os PROCURA sem sufixo: a unica string em lib/esp32s3/libwakenet.a e "wn10_data", e
+#    src/model_path.c compara "_MODEL_INFO_" literal. Compila, grava, boota -- e falha:
+#
+#      E WAKENET10: can not find wn10_data in model wn10_heynova
+#      E AFE: Failed to create WakeNet model data for model: wn10_heynova
+#      I AFE: AFE Pipeline: [input] -> |VAD(WebRTC)| -> [output]     <-- sem WakeNet
+#
+#    Atinge os OITO modelos WN10 do catalogo, e libwakenet.a e binario: sem conserto deste
+#    lado. Reportado em https://github.com/espressif/esp-sr/issues/242 -- reabra este
+#    experimento quando houver correcao, nao antes.
+#
+#    ⚠️ E NAO CONFIE NA LINHA "detector: WakeNet" DO BOOT para verificar. Ela saiu igual com
+#    o modelo quebrado, tres linhas depois do erro: diz qual detector foi CONFIGURADO, nao
+#    qual subiu. So vale o AFE Pipeline conter |WakeNet(<nome>,)|.
+#
+#    ⚠️ Subir para o esp-sr 2.5.3 tambem engorda o app em +1062 KB (o esp-dl novo), deixando
+#    3,9% de folga na particao ota_0, que e de tamanho fixo. Isso e o obstaculo seguinte.
+#
+#    Para repetir: SOPHIA_TTS=n, WN10_HEYNOVA=y, e esp-sr ~2.5.3 no idf_component.yml.
+#    Detalhes em AnniaVox: doc/wake-word-fatos-verificados.md secao 4-F.
 CONFIG_SR_WN_WN9_SOPHIA_TTS=y
 
 # O modelo MultiNet fica no assets mesmo sem ser usado como despertar: e o que permite
