@@ -11,28 +11,30 @@ CONFIG_BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA=y
 # ⚠️ O PRECO: o aparelho deixa de atender por "ok annia" e passa a atender por "Sophia".
 CONFIG_USE_AFE_WAKE_WORD=y
 
-# ⚠️⚠️ EXPERIMENTO 08/09/2026: WakeNet10 com "Hey Nova", no lugar do WakeNet9 "Sophia".
+# 🚨 NAO LIGUE UM MODELO WakeNet10 AQUI. FOI TESTADO EM 08/09/2026 E NAO CARREGA.
 #
-#    NAO E MUDANCA DE PRODUTO. E CONTROLE POSITIVO CONHECIDO.
+#    O esp-sr 2.5.3 DISTRIBUI os modelos WN10 como wn10_data_p1/_p2 e _MODEL_INFO_p1/_p2, e
+#    os PROCURA sem sufixo: a unica string em lib/esp32s3/libwakenet.a e "wn10_data", e
+#    src/model_path.c compara "_MODEL_INFO_" literal. Compila, grava, boota -- e falha:
 #
-#    Em 07/09 a Espressif anunciou que passou a gerar as wake words pedidas com WakeNet10 e
-#    um pipeline de TTS (esp-sr issue #88, comentario 5564365968), e ja publicou dois
-#    modelos ingleses: wn10_heynova e wn10_heyhermes. O nosso pedido de "ok annia" esta na
-#    mesma fila -- e se ele for atendido como wn10_okannia, e preciso saber ANTES se o
-#    WakeNet10 sequer roda neste aparelho.
+#      E WAKENET10: can not find wn10_data in model wn10_heynova
+#      E AFE: Failed to create WakeNet model data for model: wn10_heynova
+#      I AFE: AFE Pipeline: [input] -> |VAD(WebRTC)| -> [output]     <-- sem WakeNet
 #
-#    "Hey Nova" nao interessa a ninguem aqui. Interessa que e um modelo WN10 que a Espressif
-#    diz funcionar: se ele acordar o MUMA, o caminho esta provado e a chegada de um modelo
-#    nosso vira trocar um simbolo nesta linha. Se nao acordar, e muito melhor descobrir
-#    agora do que no dia da entrega.
+#    Atinge os OITO modelos WN10 do catalogo, e libwakenet.a e binario: sem conserto deste
+#    lado. Reportado em https://github.com/espressif/esp-sr/issues/242 -- reabra este
+#    experimento quando houver correcao, nao antes.
 #
-#    Exigiu subir main/idf_component.yml de esp-sr ~2.4.7 para ~2.5.3: o WN10 entrou no
-#    esp-sr em 17/08/2026, e o Kconfig do 2.4.7 nao tem NENHUMA entrada WN10.
+#    ⚠️ E NAO CONFIE NA LINHA "detector: WakeNet" DO BOOT para verificar. Ela saiu igual com
+#    o modelo quebrado, tres linhas depois do erro: diz qual detector foi CONFIGURADO, nao
+#    qual subiu. So vale o AFE Pipeline conter |WakeNet(<nome>,)|.
 #
-#    PARA VOLTAR: SOPHIA_TTS=y, WN10_HEYNOVA=n, esp-sr de volta a ~2.4.7. O estado que
-#    estava gravado hoje esta salvo -- ver doc/backup-e-restauracao-do-aparelho.md.
-CONFIG_SR_WN_WN9_SOPHIA_TTS=n
-CONFIG_SR_WN_WN10_HEYNOVA=y
+#    ⚠️ Subir para o esp-sr 2.5.3 tambem engorda o app em +1062 KB (o esp-dl novo), deixando
+#    3,9% de folga na particao ota_0, que e de tamanho fixo. Isso e o obstaculo seguinte.
+#
+#    Para repetir: SOPHIA_TTS=n, WN10_HEYNOVA=y, e esp-sr ~2.5.3 no idf_component.yml.
+#    Detalhes em AnniaVox: doc/wake-word-fatos-verificados.md secao 4-F.
+CONFIG_SR_WN_WN9_SOPHIA_TTS=y
 
 # O modelo MultiNet fica no assets mesmo sem ser usado como despertar: e o que permite
 # voltar para uma palavra propria depois, sem recompilar.
