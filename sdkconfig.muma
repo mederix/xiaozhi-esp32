@@ -11,30 +11,33 @@ CONFIG_BOARD_TYPE_SPOTPEAR_ESP32_S3_1_54_MUMA=y
 # ⚠️ O PRECO: o aparelho deixa de atender por "ok annia" e passa a atender por "Sophia".
 CONFIG_USE_AFE_WAKE_WORD=y
 
-# 🚨 NAO LIGUE UM MODELO WakeNet10 AQUI. FOI TESTADO EM 08/09/2026 E NAO CARREGA.
+# ⚠️ EXPERIMENTO 11/09/2026 (2a rodada): WakeNet10 com o pipeline de assets CORRIGIDO.
 #
-#    O esp-sr 2.5.3 DISTRIBUI os modelos WN10 como wn10_data_p1/_p2 e _MODEL_INFO_p1/_p2, e
-#    os PROCURA sem sufixo: a unica string em lib/esp32s3/libwakenet.a e "wn10_data", e
-#    src/model_path.c compara "_MODEL_INFO_" literal. Compila, grava, boota -- e falha:
+#    A 1a rodada (08/09) concluiu que o esp-sr 2.5.3 distribuia os modelos WN10 com sufixo
+#    _p1/_p2 e os procurava sem sufixo -- "inconsistencia do pacote, sem conserto deste
+#    lado". ESTAVA ERRADO, e a Espressif explicou no esp-sr#242 (comentario 5633472245):
 #
-#      E WAKENET10: can not find wn10_data in model wn10_heynova
-#      E AFE: Failed to create WakeNet model data for model: wn10_heynova
-#      I AFE: AFE Pipeline: [input] -> |VAD(WebRTC)| -> [output]     <-- sem WakeNet
+#      - _p1 = esp32s3 (PIEv1), _p2 = esp32p4/esp32s31 (PIEv2). Os dois vem no pacote.
+#      - model/movemodel.py (copy_wn10_model) escolhe o do alvo NA BUILD e renomeia
+#        wn10_data_p1 -> wn10_data, _MODEL_INFO_p1 -> _MODEL_INFO_, descartando o outro.
 #
-#    Atinge os OITO modelos WN10 do catalogo, e libwakenet.a e binario: sem conserto deste
-#    lado. Reportado em https://github.com/espressif/esp-sr/issues/242 -- reabra este
-#    experimento quando houver correcao, nao antes.
+#    O movemodel.py nunca rodou aqui: o esp-sr so o chama quando a tabela de particoes tem
+#    uma particao "model" (esp-sr/CMakeLists.txt:103), e a nossa (partitions/v2/16m.csv) nao
+#    tem. O Xiaozhi monta o srmodels.bin sozinho, em scripts/build_default_assets.py, com
+#    um shutil.copytree cru do diretorio do modelo (:150 e :176) -- porte parcial do
+#    movemodel.py de antes do WN10 existir. Por isso a tabela da secao 4-F mostrava
+#    wn10_data_p1/_p2 COM sufixo dentro do generated_assets.bin.
 #
-#    ⚠️ E NAO CONFIE NA LINHA "detector: WakeNet" DO BOOT para verificar. Ela saiu igual com
-#    o modelo quebrado, tres linhas depois do erro: diz qual detector foi CONFIGURADO, nao
-#    qual subiu. So vale o AFE Pipeline conter |WakeNet(<nome>,)|.
+#    CORRIGIDO em scripts/build_default_assets.py: copy_wn10_model portado, selecao por
+#    CONFIG_IDF_TARGET. Provado em unidade contra o modelo real antes de compilar.
 #
-#    ⚠️ Subir para o esp-sr 2.5.3 tambem engorda o app em +1062 KB (o esp-dl novo), deixando
-#    3,9% de folga na particao ota_0, que e de tamanho fixo. Isso e o obstaculo seguinte.
+#    ⚠️ CONTINUA VALENDO: nao confie na linha "detector: WakeNet" do boot -- ela sai igual
+#    com o modelo quebrado. So vale o AFE Pipeline conter |WakeNet(<nome>,)|.
+#    ⚠️ E o esp-sr 2.5.3 engorda o app em +1062 KB (esp-dl), deixando ~3,9% na ota_0.
 #
-#    Para repetir: SOPHIA_TTS=n, WN10_HEYNOVA=y, e esp-sr ~2.5.3 no idf_component.yml.
-#    Detalhes em AnniaVox: doc/wake-word-fatos-verificados.md secao 4-F.
-CONFIG_SR_WN_WN9_SOPHIA_TTS=y
+#    Detalhes em AnniaVox: doc/wake-word-fatos-verificados.md secoes 4-F e 4-G.
+CONFIG_SR_WN_WN9_SOPHIA_TTS=n
+CONFIG_SR_WN_WN10_HEYNOVA=y
 
 # O modelo MultiNet fica no assets mesmo sem ser usado como despertar: e o que permite
 # voltar para uma palavra propria depois, sem recompilar.

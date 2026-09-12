@@ -155,25 +155,104 @@ def copy_directory(src, dst):
         return False
 
 
-def process_sr_models(wakenet_model_dirs, multinet_model_dirs, build_dir, assets_dir):
+# WakeNet10 ships one model body per PIE version, suffixed by target. esp-sr's own
+# build (model/movemodel.py, copy_wn10_model) picks the variant for the build target and
+# renames it to the unsuffixed name the runtime looks for (`wn10_data`, `_MODEL_INFO_`).
+#
+# This script bypasses esp-sr's packer -- it copies the model directory raw into the
+# assets partition -- so without this step every WN10 model lands with BOTH variants,
+# still suffixed, and libwakenet.a fails at boot with
+# "can not find wn10_data in model <name>". Measured on esp32s3 with esp-sr 2.5.3;
+# root cause explained by Espressif in https://github.com/espressif/esp-sr/issues/242.
+#
+# Table and rename map are copied verbatim from movemodel.py so the two stay in sync.
+WN10_PIE_VERSIONS = {
+    "esp32s3": "p1",
+    "esp32p4": "p2",
+    "esp32s31": "p2",
+}
+
+
+def is_wn10_model_dir(model_dir):
+    """A WakeNet10 model directory is one that ships target-suffixed variants."""
+    if not os.path.isdir(model_dir):
+        return False
+    return any(name.endswith("_p1") or name.endswith("_p2") for name in os.listdir(model_dir))
+
+
+def copy_wn10_model(model_path, target_path, target):
+    """
+    Copy a WakeNet10 model selecting the variant for `target` and dropping the others.
+    Ported from esp-sr model/movemodel.py (copy_wn10_model) -- keep in sync.
+    """
+    if target not in WN10_PIE_VERSIONS:
+        raise ValueError(
+            f"Invalid target for WN10 model: {target!r} "
+            f"(known: {', '.join(sorted(WN10_PIE_VERSIONS))})")
+
+    pie_version = WN10_PIE_VERSIONS[target]
+    selected_files = {
+        f"wn10_data_{pie_version}": "wn10_data",
+        f"_MODEL_INFO_{pie_version}": "_MODEL_INFO_",
+    }
+
+    os.makedirs(target_path)
+    selected = 0
+    for file_name in os.listdir(model_path):
+        source = os.path.join(model_path, file_name)
+        if file_name in selected_files:
+            destination = os.path.join(target_path, selected_files[file_name])
+            selected += 1
+        elif file_name.endswith("_p1") or file_name.endswith("_p2"):
+            continue
+        else:
+            destination = os.path.join(target_path, file_name)
+
+        if os.path.isdir(source):
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+
+    # Both files must exist for the model to load; a half-selected model fails at boot
+    # with the same error as no selection at all, so refuse to pack it.
+    if selected != len(selected_files):
+        raise RuntimeError(
+            f"WN10 model at {model_path} has no complete {pie_version} variant for "
+            f"{target}: found {selected} of {len(selected_files)} expected files")
+
+    print(f"Copied WN10 model ({target} -> {pie_version}): {model_path} -> {target_path}")
+    return True
+
+
+def process_sr_models(wakenet_model_dirs, multinet_model_dirs, build_dir, assets_dir, target=None):
     """Process SR models (wakenet and multinet) and generate srmodels.bin"""
     if not wakenet_model_dirs and not multinet_model_dirs:
         return None
-    
+
     # Create SR models build directory
     sr_models_build_dir = os.path.join(build_dir, "srmodels")
     if os.path.exists(sr_models_build_dir):
         shutil.rmtree(sr_models_build_dir)
     os.makedirs(sr_models_build_dir)
-    
+
     models_processed = 0
-    
+
     # Copy wakenet models if available
     if wakenet_model_dirs:
         for wakenet_model_dir in wakenet_model_dirs:
             wakenet_name = os.path.basename(wakenet_model_dir)
             wakenet_dst = os.path.join(sr_models_build_dir, wakenet_name)
-            if copy_directory(wakenet_model_dir, wakenet_dst):
+            if is_wn10_model_dir(wakenet_model_dir):
+                # WN10: select the variant for the build target (see copy_wn10_model).
+                # A raw copy here is exactly the bug -- both variants, still suffixed.
+                if not target:
+                    raise RuntimeError(
+                        f"WN10 model {wakenet_name} needs the build target to pick its "
+                        f"variant, but CONFIG_IDF_TARGET was not found in sdkconfig")
+                copied = copy_wn10_model(wakenet_model_dir, wakenet_dst, target)
+            else:
+                copied = copy_directory(wakenet_model_dir, wakenet_dst)
+            if copied:
                 models_processed += 1
                 print(f"Added wakenet model: {wakenet_name}")
     
@@ -449,6 +528,22 @@ def pack_assets_simple(target_path, include_path, out_file, assets_path, max_nam
 # =============================================================================
 # Configuration and main functions
 # =============================================================================
+
+def read_idf_target_from_sdkconfig(sdkconfig_path):
+    """
+    Read CONFIG_IDF_TARGET from sdkconfig (based on movemodel.py logic).
+    Returns the target string (e.g. "esp32s3") or None if not present.
+    WakeNet10 models need it to select the per-target variant.
+    """
+    if not os.path.exists(sdkconfig_path):
+        return None
+    with io.open(sdkconfig_path, "r", encoding="utf-8") as f:
+        for label in f:
+            label = label.strip("\n")
+            if label.startswith("CONFIG_IDF_TARGET="):
+                return label.split("=", 1)[1].strip('"')
+    return None
+
 
 def read_wakenet_from_sdkconfig(sdkconfig_path):
     """
@@ -741,7 +836,7 @@ def get_emoji_collection_path(default_emoji_collection, noto_fonts_path, project
 
 def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path,
                             emoji_collection_path, extra_files_path, output_path,
-                            multinet_model_info=None, font_bundle_id=None):
+                            multinet_model_info=None, font_bundle_id=None, idf_target=None):
     """
     Build assets using integrated functions (no external dependencies)
     """
@@ -759,7 +854,7 @@ def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font
         print("Starting to build assets...")
         
         # Process each component
-        srmodels = process_sr_models(wakenet_model_paths, multinet_model_paths, temp_build_dir, assets_dir) if (wakenet_model_paths or multinet_model_paths) else None
+        srmodels = process_sr_models(wakenet_model_paths, multinet_model_paths, temp_build_dir, assets_dir, idf_target) if (wakenet_model_paths or multinet_model_paths) else None
         text_font = process_text_font(text_font_path, assets_dir) if text_font_path else None
         emoji_collection = process_emoji_collection(emoji_collection_path, assets_dir) if emoji_collection_path else None
         extra_files = process_extra_files(extra_files_path, assets_dir) if extra_files_path else None
@@ -837,6 +932,7 @@ def main():
     wake_word_config = read_wake_word_type_from_sdkconfig(args.sdkconfig)
     
     # Read SR models from sdkconfig
+    idf_target = read_idf_target_from_sdkconfig(args.sdkconfig)
     wakenet_model_names = read_wakenet_from_sdkconfig(args.sdkconfig)
     multinet_model_names = read_multinet_from_sdkconfig(args.sdkconfig)
     
@@ -925,7 +1021,7 @@ def main():
     # Build the assets
     success = build_assets_integrated(
         wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path,
-        extra_files_path, args.output, multinet_model_info, font_bundle_id)
+        extra_files_path, args.output, multinet_model_info, font_bundle_id, idf_target)
     
     if not success:
         sys.exit(1)
